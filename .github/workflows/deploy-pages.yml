@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Queue behind a running publish rather than cancelling it half-way.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.33.2, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: 'pnpm' }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+        env:
+          # Pages serves from /<repo>/; Vite uses this for asset URLs and the
+          # router reads the same value, so the two cannot disagree.
+          APP_BASE_PATH: /${{ github.event.repository.name }}/
+
+      # Pages has no server to rewrite unknown paths onto index.html, so a deep
+      # link like /diff?query=... would 404 on a hard refresh. Serving the same
+      # document as the 404 page is the standard SPA workaround, and deep links
+      # are the whole reason the selection lives in the URL.
+      - name: Add an SPA fallback
+        run: cp dist/index.html dist/404.html
+
+      # Jekyll drops files beginning with an underscore, which Vite emits.
+      - name: Disable Jekyll processing
+        run: touch dist/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

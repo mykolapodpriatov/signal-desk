@@ -37,8 +37,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: 'pnpm' }
       - run: pnpm install --frozen-lockfile
-      - name: Unit + component tests (Vitest, incl. axe)
+      - name: Unit + component tests (Vitest, incl. axe and the benchmark)
         run: pnpm test
+      # Printed, not asserted on timing: the render counts are already asserted
+      # inside the suite, and a shared runner's milliseconds are noise.
+      - name: Benchmark table
+        run: pnpm bench
 
   build:
     name: Build
