@@ -8,7 +8,15 @@ export default tseslint.config(
   {
     files: ['scripts/**/*.mjs', '*.config.{ts,mts,mjs}'],
     languageOptions: {
-      globals: { console: 'readonly', process: 'readonly' },
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        // The recorder runs on Node 22+, where WebSocket and the timer
+        // functions are global.
+        WebSocket: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
     },
   },
   ...tseslint.configs.strict,
