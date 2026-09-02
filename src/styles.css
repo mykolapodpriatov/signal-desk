@@ -1,0 +1,67 @@
+/* Tokens declared once. Dark is the default here rather than the exception:
+   this is a screen people stare at for hours. */
+:root {
+  --ink: #e7e9ee;
+  --paper: #0d0f13;
+  --surface: #14171d;
+  --muted: #98a1b0;
+  --border: rgba(231, 233, 238, 0.13);
+  --accent: #5b9cff;
+  --up: #2ebd85;
+  --down: #f6465d;
+  --warn: #f0a53d;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --ink: #14161a;
+    --paper: #ffffff;
+    --surface: #f6f7f9;
+    --muted: #5b6472;
+    --border: rgba(20, 22, 26, 0.12);
+    --accent: #2563eb;
+    --up: #0f9d58;
+    --down: #d93025;
+    --warn: #b45309;
+    color-scheme: light;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  line-height: 1.5;
+}
+
+.mono,
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

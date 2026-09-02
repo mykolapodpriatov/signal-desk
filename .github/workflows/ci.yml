@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.33.2, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: 'pnpm' }
+      - run: pnpm install --frozen-lockfile
+      - name: Formatting (Prettier)
+        run: pnpm format:check
+      - name: Types (tsc --noEmit)
+        run: pnpm typecheck
+      - name: Lint (ESLint)
+        run: pnpm lint
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.33.2, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: 'pnpm' }
+      - run: pnpm install --frozen-lockfile
+      - name: Unit + component tests (Vitest, incl. axe)
+        run: pnpm test
+
+  build:
+    name: Build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.33.2, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: 'pnpm' }
+      - run: pnpm install --frozen-lockfile
+      - name: Production build
+        run: pnpm build
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-22.04
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.33.2, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: 'pnpm' }
+      - run: pnpm install --frozen-lockfile
+      # Chromium only: these specs assert behaviour, not rendering, so the other
+      # engines would triple the runtime for no additional signal.
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Playwright
+        run: pnpm e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
