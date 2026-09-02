@@ -1,0 +1,23 @@
+{
+  "name": "signal-desk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "High-frequency realtime React UI without turning every event into a render.",
+  "license": "MIT",
+  "author": "Mykola Podpriatov",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "bench": "BENCH_TABLE=1 vitest run bench",
+    "e2e": "playwright test"
+  },
+  "engines": { "node": ">=22.0.0" },
+  "packageManager": "pnpm@10.33.2"
+}
