@@ -6,6 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable candle interval and indicator periods.** The interval (1s to
+  5m) and the EMA/RSI/ATR periods were fixed constants; they are now UI
+  controls. Changing the interval re-aggregates the ring buffer's existing raw
+  ticks into new candles rather than resetting the chart to empty.
+- A visible note explaining that candle history comes from the ring buffer's
+  fixed-size window, not a fixed span of time, so a wider interval can
+  legitimately show less history than before (see ADR 002).
+
 ## [1.0.0] - 2026-09-02
 
 First release. Every claim in the README is backed by a test, a measurement or a
