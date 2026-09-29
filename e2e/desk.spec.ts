@@ -102,5 +102,43 @@ test.describe('the desk', () => {
 
     await expect(page.getByLabel('Source')).toHaveCount(1);
     await expect(page.getByLabel('Speed')).toHaveCount(1);
+    await expect(page.getByLabel('Interval')).toHaveCount(1);
+    await expect(page.getByLabel('EMA period')).toHaveCount(1);
+    await expect(page.getByLabel('RSI period')).toHaveCount(1);
+    await expect(page.getByLabel('ATR period')).toHaveCount(1);
+  });
+
+  test('changing the interval re-aggregates history instead of resetting to empty', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.selectOption('#speed-select', '100');
+
+    const summary = page.locator('[data-part="chart-summary"]');
+    await expect(summary).toContainText(/Latest candle at .*close \d/, {
+      timeout: 15_000,
+    });
+
+    await page.selectOption('#interval-select', '60000');
+
+    // A re-aggregation reads the ring buffer's existing ticks, so a candle
+    // reappears without waiting for the recording to replay from scratch,
+    // which is the thing a reset-to-empty would not do.
+    await expect(summary).toContainText(/Latest candle at .*close \d/, {
+      timeout: 5_000,
+    });
+  });
+
+  test('explains that history is bounded when the interval changes', async ({
+    page,
+  }) => {
+    // The design tradeoff from the issue this feature shipped for: the ring
+    // buffer is a fixed number of ticks, not a fixed span of time, so this
+    // has to be visible rather than a surprise.
+    await page.goto('/');
+
+    await expect(page.locator('[data-part="history-note"]')).toContainText(
+      /interval/i,
+    );
   });
 });

@@ -131,7 +131,7 @@ UI says which one you are looking at.
 
 ## Testing
 
-98 unit and component tests, 9 Playwright specs, and the benchmark.
+103 unit and component tests, 11 Playwright specs, and the benchmark.
 `pnpm test` · `pnpm e2e` · `pnpm bench`.
 
 Three things the tests exist to catch, because each is invisible until it is
@@ -178,9 +178,9 @@ made it better.
 ```bash
 pnpm install
 pnpm dev      # http://localhost:5173, replaying the recorded session
-pnpm test     # 98 unit + component tests
+pnpm test     # 103 unit + component tests
 pnpm bench    # the render-count comparison
-pnpm e2e      # 9 Playwright specs against a production build
+pnpm e2e      # 11 Playwright specs against a production build
 pnpm build
 ```
 

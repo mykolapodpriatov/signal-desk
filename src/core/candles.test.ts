@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { aggregateTicks, appendTicks, bucketStart } from './candles';
-import type { Tick } from './ringBuffer';
+import {
+  aggregateTicks,
+  appendTicks,
+  bucketStart,
+  reaggregateFromBuffer,
+} from './candles';
+import { TickRingBuffer, type Tick } from './ringBuffer';
 
 const MINUTE = 60_000;
 const tick = (time: number, price: number, size = 1): Tick => ({
@@ -186,5 +191,83 @@ describe('appendTicks', () => {
 
     expect(result.changed).toBe(true);
     expect(result.candles).toHaveLength(1);
+  });
+});
+
+describe('reaggregateFromBuffer', () => {
+  it('rebuilds candles at a new interval from the buffer, not from empty', () => {
+    const buffer = new TickRingBuffer(16);
+    buffer.push(tick(0, 100));
+    buffer.push(tick(30_000, 110));
+    buffer.push(tick(60_000, 90));
+    buffer.push(tick(90_000, 95));
+
+    // At one-minute candles this is two bars; changing the interval should
+    // fold the same raw ticks differently, not lose them.
+    const perMinute = reaggregateFromBuffer(buffer, { intervalMs: MINUTE });
+    expect(perMinute.candles.map((candle) => candle.time)).toEqual([0, MINUTE]);
+
+    const perHalfMinute = reaggregateFromBuffer(buffer, {
+      intervalMs: 30_000,
+    });
+    expect(perHalfMinute.candles.map((candle) => candle.time)).toEqual([
+      0, 30_000, 60_000, 90_000,
+    ]);
+  });
+
+  it('reads the buffer without consuming it, so it can run repeatedly', () => {
+    // A human can change the interval control more than once in a session;
+    // each change has to see the same raw history, not whatever is left
+    // after the previous change already read it.
+    const buffer = new TickRingBuffer(16);
+    buffer.push(tick(0, 100));
+    buffer.push(tick(1_000, 105));
+
+    const first = reaggregateFromBuffer(buffer, { intervalMs: MINUTE });
+    const second = reaggregateFromBuffer(buffer, { intervalMs: MINUTE });
+
+    expect(second.candles).toEqual(first.candles);
+  });
+
+  it('shows only what the bounded window still holds once it has wrapped', () => {
+    // This is the design tradeoff from the issue: the ring buffer is a fixed
+    // number of ticks, not a fixed span of time, so a wider interval can
+    // legitimately show less history than a narrower one did.
+    const buffer = new TickRingBuffer(2);
+    buffer.push(tick(0, 100));
+    buffer.push(tick(60_000, 90));
+    buffer.push(tick(120_000, 95)); // overwrites the tick at time 0
+
+    const result = reaggregateFromBuffer(buffer, { intervalMs: MINUTE });
+
+    expect(result.candles.map((candle) => candle.time)).toEqual([
+      60_000, 120_000,
+    ]);
+  });
+
+  it('returns nothing for an empty buffer', () => {
+    const buffer = new TickRingBuffer(4);
+
+    const result = reaggregateFromBuffer(buffer, { intervalMs: MINUTE });
+
+    expect(result.candles).toEqual([]);
+    expect(result.outOfOrder).toBe(0);
+  });
+
+  it('honours a `since` cursor, so an earlier session is not stitched back in', () => {
+    // The ring buffer is not cleared when the human switches source (replay
+    // to live, say), so reaggregating from the very start would fold the old
+    // source's ticks into what is supposed to be a fresh series. A caller
+    // that knows where the new source began passes that write count.
+    const buffer = new TickRingBuffer(16);
+    buffer.push(tick(0, 100)); // belongs to a session that has "ended"
+    const since = buffer.totalWritten;
+    buffer.push(tick(60_000, 200));
+    buffer.push(tick(90_000, 210));
+
+    const result = reaggregateFromBuffer(buffer, { intervalMs: MINUTE }, since);
+
+    expect(result.candles.map((candle) => candle.time)).toEqual([60_000]);
+    expect(result.candles[0]?.open).toBe(200);
   });
 });

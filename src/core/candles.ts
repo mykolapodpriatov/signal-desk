@@ -12,7 +12,7 @@
 //
 // Each has a test. None of them is hypothetical.
 
-import type { Tick } from './ringBuffer';
+import type { Tick, TickRingBuffer } from './ringBuffer';
 
 export interface Candle {
   /** Start of the interval, in milliseconds. */
@@ -150,4 +150,32 @@ export function appendTicks(
     changed: merged.candles.length > 0,
     outOfOrder: merged.outOfOrder,
   };
+}
+
+/**
+ * Rebuild a candle series at a different interval from everything a ring
+ * buffer currently holds, instead of starting from empty.
+ *
+ * `drainSince` is not destructive: it does not consume a cursor owned by the
+ * buffer, only the caller's own bookkeeping, so this can run next to the
+ * render loop's independent cursor without disturbing it.
+ *
+ * `since` defaults to the start of time, but a caller that has reset its
+ * displayed series for a reason the buffer does not know about (switching
+ * from a replay to the live feed, for instance, which does not clear the
+ * buffer) should pass the write count at that moment. Otherwise this would
+ * dutifully reaggregate whatever older ticks the buffer still physically
+ * holds back into a series that was supposed to start fresh.
+ *
+ * The buffer's window is bounded by capacity, not by time (see ADR 002). If
+ * it has already overwritten ticks from before that window, this legitimately
+ * produces less history than the previous interval was showing. That loss is
+ * surfaced in the UI, not hidden here.
+ */
+export function reaggregateFromBuffer(
+  buffer: TickRingBuffer,
+  options: AggregateOptions,
+  since = 0,
+): { candles: Candle[]; outOfOrder: number } {
+  return aggregateTicks(buffer.drainSince(since).ticks, options);
 }
