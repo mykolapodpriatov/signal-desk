@@ -31,14 +31,32 @@ export function ema(
   const out: (number | null)[] = new Array(values.length).fill(null);
   if (values.length < period) return out;
 
-  let sum = 0;
-  for (let i = 0; i < period; i += 1) sum += values[i] as number;
-  let previous = sum / period;
-  out[period - 1] = previous;
-
+  // A non-finite tick must not be folded into the average. NaN would make
+  // every later value NaN, and the chart would go blank until reload.
+  // The run resets and warms up again on the next finite stretch.
+  const seed: number[] = [];
+  let previous: number | null = null;
   const k = 2 / (period + 1);
-  for (let i = period; i < values.length; i += 1) {
-    previous = (values[i] as number) * k + previous * (1 - k);
+
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i] as number;
+    if (!Number.isFinite(value)) {
+      seed.length = 0;
+      previous = null;
+      continue;
+    }
+    if (previous === null) {
+      seed.push(value);
+      if (seed.length === period) {
+        let sum = 0;
+        for (const sample of seed) sum += sample;
+        previous = sum / period;
+        out[i] = previous;
+        seed.length = 0;
+      }
+      continue;
+    }
+    previous = value * k + previous * (1 - k);
     out[i] = previous;
   }
 
@@ -63,25 +81,47 @@ export function rsi(values: readonly number[], period = 14): (number | null)[] {
   const out: (number | null)[] = new Array(values.length).fill(null);
   if (values.length <= period) return out;
 
-  let gainSum = 0;
-  let lossSum = 0;
-  for (let i = 1; i <= period; i += 1) {
-    const change = (values[i] as number) - (values[i - 1] as number);
-    if (change >= 0) gainSum += change;
-    else lossSum -= change;
-  }
+  const window: number[] = [];
+  let averageGain: number | null = null;
+  let averageLoss: number | null = null;
+  let previous: number | null = null;
 
-  let averageGain = gainSum / period;
-  let averageLoss = lossSum / period;
-  out[period] = toRsi(averageGain, averageLoss);
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i] as number;
+    if (!Number.isFinite(value)) {
+      window.length = 0;
+      averageGain = null;
+      averageLoss = null;
+      previous = null;
+      continue;
+    }
 
-  for (let i = period + 1; i < values.length; i += 1) {
-    const change = (values[i] as number) - (values[i - 1] as number);
+    if (averageGain === null || averageLoss === null || previous === null) {
+      window.push(value);
+      if (window.length === period + 1) {
+        let gainSum = 0;
+        let lossSum = 0;
+        for (let j = 1; j < window.length; j += 1) {
+          const change = (window[j] as number) - (window[j - 1] as number);
+          if (change >= 0) gainSum += change;
+          else lossSum -= change;
+        }
+        averageGain = gainSum / period;
+        averageLoss = lossSum / period;
+        out[i] = toRsi(averageGain, averageLoss);
+        previous = value;
+        window.length = 0;
+      }
+      continue;
+    }
+
+    const change = value - previous;
     const gain = change > 0 ? change : 0;
     const loss = change < 0 ? -change : 0;
     averageGain = (averageGain * (period - 1) + gain) / period;
     averageLoss = (averageLoss * (period - 1) + loss) / period;
     out[i] = toRsi(averageGain, averageLoss);
+    previous = value;
   }
 
   return out;
@@ -110,6 +150,23 @@ export interface Bar {
  * True range for the first bar has no previous close, so it is the plain
  * high−low; every later bar takes the largest of the three standard candidates.
  */
+function trueRange(bar: Bar, previous: Bar | undefined): number {
+  if (!previous) return bar.high - bar.low;
+  return Math.max(
+    bar.high - bar.low,
+    Math.abs(bar.high - previous.close),
+    Math.abs(bar.low - previous.close),
+  );
+}
+
+function barIsFinite(bar: Bar): boolean {
+  return (
+    Number.isFinite(bar.high) &&
+    Number.isFinite(bar.low) &&
+    Number.isFinite(bar.close)
+  );
+}
+
 export function atr(bars: readonly Bar[], period = 14): (number | null)[] {
   if (!Number.isInteger(period) || period <= 0) {
     throw new RangeError(`period must be a positive integer, got ${period}`);
@@ -118,28 +175,40 @@ export function atr(bars: readonly Bar[], period = 14): (number | null)[] {
   const out: (number | null)[] = new Array(bars.length).fill(null);
   if (bars.length < period) return out;
 
-  const trueRanges: number[] = [];
-  for (const [index, bar] of bars.entries()) {
-    const previous = bars[index - 1];
-    trueRanges.push(
-      previous
-        ? Math.max(
-            bar.high - bar.low,
-            Math.abs(bar.high - previous.close),
-            Math.abs(bar.low - previous.close),
-          )
-        : bar.high - bar.low,
-    );
-  }
+  const window: Bar[] = [];
+  let smoothed: number | null = null;
+  let previousBar: Bar | null = null;
 
-  let sum = 0;
-  for (let i = 0; i < period; i += 1) sum += trueRanges[i] as number;
-  let previous = sum / period;
-  out[period - 1] = previous;
+  for (let i = 0; i < bars.length; i += 1) {
+    const bar = bars[i] as Bar;
+    if (!barIsFinite(bar)) {
+      window.length = 0;
+      smoothed = null;
+      previousBar = null;
+      continue;
+    }
 
-  for (let i = period; i < bars.length; i += 1) {
-    previous = (previous * (period - 1) + (trueRanges[i] as number)) / period;
-    out[i] = previous;
+    if (smoothed === null || previousBar === null) {
+      window.push(bar);
+      if (window.length === period) {
+        let sum = 0;
+        for (let j = 0; j < window.length; j += 1) {
+          sum += trueRange(
+            window[j] as Bar,
+            j === 0 ? undefined : window[j - 1],
+          );
+        }
+        smoothed = sum / period;
+        out[i] = smoothed;
+        previousBar = bar;
+        window.length = 0;
+      }
+      continue;
+    }
+
+    smoothed = (smoothed * (period - 1) + trueRange(bar, previousBar)) / period;
+    out[i] = smoothed;
+    previousBar = bar;
   }
 
   return out;
