@@ -48,6 +48,20 @@ describe('ema', () => {
   it('handles a period of 1 as the series itself', () => {
     expect(ema([3, 9, 4], 1)).toEqual([3, 9, 4]);
   });
+
+  it('drops a non-finite tick instead of poisoning the rest of the series', () => {
+    // seed of [1, 2, 3] is 2, then NaN resets, then [4, 5, 6] seeds at 5.
+    const out = ema([1, 2, 3, Number.NaN, 4, 5, 6], 3);
+
+    expect(out[2]).toBeCloseTo(2, 10);
+    expect(out[3]).toBeNull();
+    expect(out[4]).toBeNull();
+    expect(out[5]).toBeNull();
+    expect(out[6]).toBeCloseTo(5, 10);
+    expect(out.every((value) => value === null || Number.isFinite(value))).toBe(
+      true,
+    );
+  });
 });
 
 describe('rsi', () => {
@@ -96,6 +110,17 @@ describe('rsi', () => {
     const out = rsi([10, 12, 11, 14], 2);
 
     expect(out[3]).toBeCloseTo(88.88888888888889, 8);
+  });
+
+  it('does not turn the rest of the series into NaN after one bad price', () => {
+    const out = rsi([10, 12, 11, Number.NaN, 10, 12, 11], 2);
+
+    expect(out[2]).toBeCloseTo(66.66666666666667, 8);
+    expect(out[3]).toBeNull();
+    expect(out[6]).toBeCloseTo(66.66666666666667, 8);
+    expect(out.every((value) => value === null || Number.isFinite(value))).toBe(
+      true,
+    );
   });
 
   it('stays within 0 and 100 across a noisy series', () => {
@@ -160,5 +185,24 @@ describe('atr', () => {
 
   it('rejects a nonsensical period', () => {
     expect(() => atr([], 0)).toThrow(RangeError);
+  });
+
+  it('restarts after a bar with a non-finite price', () => {
+    const out = atr(
+      [
+        bar(10, 8, 9),
+        bar(11, 9, 10),
+        bar(Number.NaN, 9, 10),
+        bar(12, 10, 11),
+        bar(13, 11, 12),
+      ],
+      2,
+    );
+
+    expect(out[1]).toBeCloseTo(2, 10);
+    expect(out[2]).toBeNull();
+    expect(out[3]).toBeNull();
+    // The two bars after the gap: TR 2, then TR 2, ATR 2.
+    expect(out[4]).toBeCloseTo(2, 10);
   });
 });
