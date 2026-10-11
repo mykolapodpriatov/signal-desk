@@ -135,7 +135,15 @@ export function appendTicks(
     rebuilt.high = Math.max(rebuilt.high, last.high);
     rebuilt.low = Math.min(rebuilt.low, last.low);
     rebuilt.volume += last.volume;
-    if (rebuilt.close === last.open && ticks.length === 0) {
+    // The seed tick is the candle open, so a batch that never lands in this
+    // bucket leaves close equal to the open. That includes a tick that only
+    // opens the next candle, and a tick that is older than this one. An empty
+    // batch never reaches here.
+    const intervalMs = options.intervalMs;
+    const touchedLast = ticks.some(
+      (tick) => bucketStart(tick.time, intervalMs) === last.time,
+    );
+    if (!touchedLast) {
       rebuilt.close = last.close;
     }
     return {
