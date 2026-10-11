@@ -220,6 +220,26 @@ describe('appendTicks', () => {
     expect(result.candles[0]?.close).toBe(130);
   });
 
+  it('keeps the finished close when a late tick follows the next candle', () => {
+    const existing = aggregateTicks([tick(0, 100), tick(1_000, 130)], {
+      intervalMs: MINUTE,
+    }).candles;
+
+    const result = appendTicks(
+      existing,
+      [tick(MINUTE + 1, 110), tick(30_000, 999)],
+      { intervalMs: MINUTE },
+    );
+
+    expect(result.outOfOrder).toBe(1);
+    expect(result.candles[0]).toMatchObject({
+      open: 100,
+      close: 130,
+      high: 130,
+    });
+    expect(result.candles[1]).toMatchObject({ time: MINUTE, open: 110 });
+  });
+
   it('starts a series from nothing', () => {
     const result = appendTicks([], [tick(0, 100)], { intervalMs: MINUTE });
 
